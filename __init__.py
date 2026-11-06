@@ -52,6 +52,7 @@ from samskara_core import (  # noqa: E402  (import after sys.path bootstrap)
     reindex_commands,
 )
 from samskara_core.extract import DEFAULT_NAMESPACE, Extractor  # noqa: E402
+from samskara_core.embedded import EmbeddedClient  # noqa: E402
 from samskara_core.facts import FactStore  # noqa: E402
 from samskara_core.journal import expand  # noqa: E402
 from samskara_core.llm import make_llm  # noqa: E402
@@ -117,12 +118,20 @@ class SamskaraMemoryProvider(MemoryProvider):
         self._session_id = session_id or ""
         self._hermes_home = str(kwargs.get("hermes_home") or os.environ.get("HERMES_HOME") or "")
         self._cfg.update(self._load_config(self._hermes_home))
-        self._client = SparqlClient(
-            self._cfg["endpoint"],
-            timeout=self._cfg["timeout"],
-            username=self._cfg["username"],
-            password=self._cfg["password"],
-        )
+        endpoint = str(self._cfg["endpoint"] or "")
+        if endpoint.startswith("embedded://"):
+            # Zero-setup path: the corpus is parsed in-process, nothing to run.
+            # Read-only and deliberately narrow -- it refuses arbitrary SPARQL
+            # rather than guessing (see samskara_core/embedded.py).
+            seed = endpoint[len("embedded://") :].strip() or "seed/demo.ttl"
+            self._client = EmbeddedClient.from_seed(seed, base=_HERE)
+        else:
+            self._client = SparqlClient(
+                endpoint,
+                timeout=self._cfg["timeout"],
+                username=self._cfg["username"],
+                password=self._cfg["password"],
+            )
         self._journal = Journal(Path(self._journal_dir()), session_id=self._session_id)
         # The vocabulary is per-user and grows with their data.
         schema_path = Path(self._journal_dir()).parent / "schema.json"
@@ -441,7 +450,7 @@ class SamskaraMemoryProvider(MemoryProvider):
                 "label": "Graph endpoint",
                 "type": "text",
                 "default": DEFAULTS["endpoint"],
-                "help": "SPARQL endpoint. A base URL gets /sparql appended automatically.",
+                "help": "SPARQL endpoint. A base URL gets /sparql appended automatically. Use embedded://seed/demo.ttl to run the demo corpus in-process, with nothing installed.",
             },
             {
                 "name": "auto_recall",

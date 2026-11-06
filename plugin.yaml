@@ -1,4 +1,4 @@
 name: samskara
-version: "0.2.1"
+version: "0.3.0"
 description: "Relational memory for Hermes — multi-hop recall over a knowledge graph, with an ontology that infers (Incidente ⊑ Evento) and provenance for every fact."
 requires_hermes: ">=0.19.0"

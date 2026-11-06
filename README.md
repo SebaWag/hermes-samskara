@@ -5,7 +5,7 @@ similar?"*, Samskara answers *"what depends on this, and why"* — and when two
 memories contradict each other, it says so instead of picking one.
 
 [![CI](https://github.com/SebaWag/hermes-samskara/actions/workflows/ci.yml/badge.svg)](https://github.com/SebaWag/hermes-samskara/actions/workflows/ci.yml)
-![tests](https://img.shields.io/badge/tests-118%20offline-brightgreen)
+![tests](https://img.shields.io/badge/tests-136%20offline-brightgreen)
 ![deps](https://img.shields.io/badge/python%20deps-0-blue)
 
 > **Samskara** (Sanskrit: *saṃskāra*) — the latent impression an experience leaves
@@ -112,6 +112,46 @@ external service to run.
 
 ---
 
+## Try it in one command, with nothing installed
+
+```bash
+git clone https://github.com/SebaWag/hermes-samskara
+cd hermes-samskara && python tools/demo.py
+```
+
+No graph server. No Docker. No API key. No network. `tools/demo.py` parses the
+**69-triple demo corpus in process** and runs the same `recall()` Hermes calls
+before a turn — you get the weighted block, the reinforcement, and the conflict,
+in about a second.
+
+```
+1) ¿puedo subir PostgreSQL a la 17 en Onboarding Hub?
+[memoria relacional · samskara · 3 entidad(es) · 18 hecho(s) · 10 consulta(s) · 0.18 ms]
+• PostgreSQL  (postgresql)
+   ← usa tecnologia: Onboarding Hub  ·0.45
+   ...
+3) now teach the opposite and ask again
+[conflicto · dos versiones del mismo hecho, no elijo por ti]
+   dec_congelar_pg · estado = descongelado  (peso 0.53, 1 sesión/es)
+   dec_congelar_pg · estado = vigente  (peso 0.45, 1 sesión/es)
+```
+
+That is the embedded backend: a read-only, in-process store behind the same
+client interface. **Its scope is honest and narrow** — it answers the three query
+shapes Samskara issues (label search, outgoing and incoming neighbourhood) and
+**refuses anything else** rather than guessing, because a wrong answer from memory
+is worse than no answer.
+
+```bash
+# zero-setup, in-process
+export SAMSKARA_ENDPOINT=embedded://seed/demo.ttl
+
+# or a real corpus, unchanged code
+export SAMSKARA_ENDPOINT=http://127.0.0.1:1234/sparql
+```
+
+---
+
 ## Install
 
 ```bash
@@ -122,7 +162,8 @@ hermes config set memory.provider samskara
 
 Then point Samskara at your graph. It speaks plain SPARQL-over-HTTP, so any
 endpoint that answers `POST /sparql` works (MillenniumDB, Oxigraph, Jena,
-Blazegraph, Neptune, …):
+Blazegraph, Neptune, …). If you just want to see it work, skip the server
+entirely with `SAMSKARA_ENDPOINT=embedded://seed/demo.ttl`:
 
 ```bash
 # in $HERMES_HOME/.env
@@ -258,9 +299,13 @@ SELECT ?proyecto ?decisionLabel WHERE {
 ## Testing
 
 ```bash
-python -m pytest tests/ -v                       # 118 offline tests, no graph, no network
+python -m pytest tests/ -v                       # 136 offline tests, no graph, no network
 python tests/integration_graph.py <endpoint>     # needs a live graph
 ```
+
+`tests/test_embedded.py` pins the in-process backend to the same corpus as the
+real one (69 triples, the count MillenniumDB reports) and checks that it refuses
+arbitrary SPARQL instead of guessing.
 
 The offline suite includes `tests/test_failure_modes.py`: a graph that is down, a
 graph that answers HTML instead of JSON, a session id that tries to climb out of
