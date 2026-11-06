@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · py${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python: ["3.10", "3.11", "3.12", "3.13"]
+        include:
+          - os: macos-latest
+            python: "3.12"
+          - os: windows-latest
+            python: "3.12"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      # Stdlib only: the plugin declares no dependencies, so pytest is the
+      # whole toolchain. If this ever needs more, the plugin's promise broke.
+      - name: Install pytest
+        run: python -m pip install --upgrade pip pytest
+
+      - name: Unit tests (offline: no graph, no network, no Hermes)
+        run: python -m pytest tests/ -q
+
+      - name: Manifest sanity
+        shell: python
+        run: |
+          import pathlib, re, sys
+          text = pathlib.Path("plugin.yaml").read_text(encoding="utf-8")
+          checks = {
+              "name": r"^name: samskara$",
+              "version": r'^version: "\d+\.\d+\.\d+"$',
+              "requires_hermes": r'^requires_hermes: ">=\d+\.\d+',
+              "description": r"^description: ",
+          }
+          failed = [k for k, pat in checks.items() if not re.search(pat, text, re.M)]
+          if failed:
+              print(f"plugin.yaml missing or malformed: {failed}")
+              sys.exit(1)
+          print("plugin.yaml: name, version, requires_hermes, description OK")
+
+      - name: Benchmarks run (smoke, not a gate)
+        run: python tools/bench.py --json > bench.json
+        continue-on-error: true
+
+      - name: Upload benchmark snapshot
+        if: matrix.os == 'ubuntu-latest' && matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: bench-json
+          path: bench.json
+          if-no-files-found: ignore

@@ -11,7 +11,7 @@ Samskara is a **memory provider** backed by a knowledge graph (MillenniumDB or a
 
 ## Three things that are not a prompt or a skill
 
-1. **Subsumption inference**, materialised at reindex time (`Incidente ⊑ Evento`, `BaseDeDatos ⊑ Tecnologia`). *"What events happened?"* returns incidents even though nothing asserted `a Evento`; reads stay plain SPARQL at ~0.1 ms because the closure is computed when the graph is rebuilt, not per query.
+1. **Subsumption inference**, materialised at reindex time (`Incidente ⊑ Evento`, `BaseDeDatos ⊑ Tecnologia`). *"What events happened?"* returns incidents even though nothing asserted `a Evento`; reads stay plain SPARQL — the engine reports 0.05 ms of execution, 0.87 ms wall clock over loopback — because the closure is computed when the graph is rebuilt, not per query.
 2. **Per-fact weight**: `0.5·confidence + repetition + 0.2·recency + reinforcement by use`, with decay after 30 days of disuse. It lives in a SQLite sidecar, so the graph stays plain RDF and fast. Measured on the demo graph: **0.45 → 0.55 after one recall**, while unused facts stayed at 0.45. Trust is a hierarchy, not a constant: explicit write 0.90 > extraction 0.65 > import 0.50.
 3. **Conflicts are surfaced, never resolved silently.** Two contradictory values for one attribute are both kept and flagged; the recall block and the `samskara_conflicts` tool report both, with weights, and the agent declines to choose:
 
@@ -38,4 +38,4 @@ Install, and the graph is built from the sessions the agent already had: `tools/
 ✓ no core override · ✓ requires_hermes '>=0.19.0' parses
 ```
 
-100 offline tests (`python -m pytest tests/ -q`), no graph and no network required.
+118 offline tests (`python -m pytest tests/ -q`), no graph and no network required — including the failure modes: graph down, HTML instead of JSON, path traversal in a session id, an ontology cycle.

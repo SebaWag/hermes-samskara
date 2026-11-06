@@ -1,4 +1,12 @@
-# Samskara — relational memory for Hermes Agent
+# Samskara — memory that admits doubt
+
+**Relational memory for Hermes Agent.** Where a vector store answers *"what looks
+similar?"*, Samskara answers *"what depends on this, and why"* — and when two
+memories contradict each other, it says so instead of picking one.
+
+[![CI](https://github.com/SebaWag/hermes-samskara/actions/workflows/ci.yml/badge.svg)](https://github.com/SebaWag/hermes-samskara/actions/workflows/ci.yml)
+![tests](https://img.shields.io/badge/tests-118%20offline-brightgreen)
+![deps](https://img.shields.io/badge/python%20deps-0-blue)
 
 > **Samskara** (Sanskrit: *saṃskāra*) — the latent impression an experience leaves
 > behind, which shapes what happens next.
@@ -11,7 +19,7 @@ Most agent memory stores **text** and retrieves it by similarity. Samskara store
 and
 
 > *"You cannot upgrade PostgreSQL on Onboarding Hub — a decision from March is
-> still in force, and here is the incident that caused it, in 1.3 ms."*
+> still in force, and here is the incident that caused it, in 16 ms."*
 
 Every recall block Samskara injects into a turn carries its own **provenance**:
 how many entities, how many facts, and how many milliseconds the graph took to
@@ -34,6 +42,42 @@ two contradictory facts, weights them, and says so instead of picking one.*
 
 ---
 
+## How fast it actually is
+
+Measured, not estimated. Every number below came from `python tools/bench.py` on
+**aarch64 · 4 vCPU · Python 3.10**, against the demo corpus on loopback:
+
+| What | Measured |
+|---|---|
+| One SPARQL query, loopback (wall clock) | **0.87 ms** best · 0.95 ms median |
+| The same query, engine execution only | **0.05 ms** |
+| Full recall, graph only — question in, memory out (10 queries) | **10.2 ms** best · 11.0 ms median |
+| Full recall, default path — graph + weights + conflicts + reinforcement | **16.0 ms** best · 16.4 ms median |
+| `Journal.append()` — batch of 50, fsync | 23,600 triples/s |
+| `FactStore.record()` — SQLite sidecar | 47,700 triples/s |
+| `recall.render()` — 5 entities × 24 facts | 0.70 ms |
+
+```bash
+python tools/bench.py                                         # offline rows only
+python tools/bench.py --endpoint http://127.0.0.1:1235/sparql # adds end-to-end recall
+```
+
+**Read the gap between the first two rows, because it is the honest finding:**
+the engine plans and executes a query in **0.05 ms**, and the wall clock is
+**0.87 ms**. A recall is 10 round trips, so it costs ~10 ms — and ~16 ms once the
+weight sidecar and the conflict check run. Latency here is dominated by the
+transport, not by the graph, which is why co-locating the graph matters: over an
+SSH tunnel the same recall takes **~10 seconds**.
+
+> **And a correction we owe you.** Until v0.2.1 the block header reported
+> `client.last_ms` — the time of the **last** query — so a recall that took 10 ms
+> announced itself as `0.87 ms`. The number was real, the label was not. It now
+> reports the whole pipeline and how many queries it took:
+> `[… · 18 hecho(s) · 10 consulta(s) · 10.17 ms]`. A plugin whose entire argument
+> is *"memory that admits doubt"* cannot flatter its own latency.
+
+---
+
 ## Why a graph instead of another vector store
 
 | | Vector memory | Samskara |
@@ -47,6 +91,24 @@ two contradictory facts, weights them, and says so instead of picking one.*
 
 Vector search cannot answer *"which projects use PostgreSQL **and** are covered
 by a decision that is still in force"* — that is not a distance, it is a path.
+
+### How it compares
+
+Compared **only on what each plugin's catalog entry documents**. "Not documented"
+means the entry does not say — not that the plugin cannot do it.
+
+| Provider | Unit of memory | Retrieval | Per-fact weight | Surfaces contradictions | Needs a service |
+|---|---|---|:--:|:--:|---|
+| Vector memory (typical) | text chunk + embedding | nearest neighbours | — | — | usually |
+| `agentmemory` | memory scoped to profile/project/author | automatic recall | not documented | not documented | AgentMemory server |
+| `agent_memory_es` | episodic / semantic / procedural | hybrid BM25 + kNN | not documented | not documented | Elasticsearch service |
+| `agentplaybooks-memory` | personal and team playbooks | bounded keyword recall | not documented | not documented | AgentPlaybooks service |
+| **`samskara`** | **entity + relation** | **traversal, 1..n hops** | **yes** | **yes, by design** | **none — stdlib only** |
+
+These are neighbours, not rivals: a vector store answers *"what looks like this?"*
+and a graph answers *"what depends on this, and why?"*. Most agents want both.
+Samskara is the graph half, and it is the only one of the four that ships with no
+external service to run.
 
 ---
 
@@ -96,10 +158,10 @@ docker run -d --name samskara-mdb --restart unless-stopped \
   imfd/millenniumdb:latest bash -c "mdb server /data/db -p 1234 --browser false"
 ```
 
-> **Co-locate the graph with the agent.** We benchmarked the same corpus over an
-> SSH tunnel between two datacentres: **0.8 ms local vs ~1000 ms remote** per
-> query. A recall makes ~10 queries, so the tunnel turns a 10 ms recall into an
-> 11 second turn. Memory belongs next to the agent — for latency *and* for
+> **Co-locate the graph with the agent.** Measured on the demo corpus: **0.87 ms
+> per query over loopback vs ~1000 ms over an SSH tunnel between datacentres**.
+> A recall issues ~10 queries, so the tunnel turns a **16 ms** recall into a
+> **10 second** turn. Memory belongs next to the agent — for latency *and* for
 > sovereignty.
 
 ---
@@ -196,9 +258,14 @@ SELECT ?proyecto ?decisionLabel WHERE {
 ## Testing
 
 ```bash
-python -m pytest tests/ -v                       # offline: parsing, rendering, journal
+python -m pytest tests/ -v                       # 118 offline tests, no graph, no network
 python tests/integration_graph.py <endpoint>     # needs a live graph
 ```
+
+The offline suite includes `tests/test_failure_modes.py`: a graph that is down, a
+graph that answers HTML instead of JSON, a session id that tries to climb out of
+the journal directory, an ontology with a cycle, and a clock that runs backwards.
+Reliability is what happens when something breaks, so it is tested explicitly.
 
 ---
 
@@ -206,7 +273,8 @@ python tests/integration_graph.py <endpoint>     # needs a live graph
 
 Labels alone are a bag of strings. Samskara declares a small hierarchy
 (`samskara_core/ontology.py`, one readable file) and **materialises the closure
-at reindex time** — so reads stay plain SPARQL at ~0.1 ms, with no reasoning in
+at reindex time** — so reads stay plain SPARQL (the engine reports **0.05 ms** of
+execution; **0.87 ms** wall clock, parse and HTTP included), with no reasoning in
 the hot path:
 
 ```

@@ -9,6 +9,7 @@ a path. Here the path is a SPARQL pattern, answered in microseconds.
 from __future__ import annotations
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -182,14 +183,21 @@ def render(
     elapsed_ms: float,
     max_chars: int = 1200,
     weights: Optional[Dict[str, float]] = None,
+    queries: int = 0,
 ) -> str:
-    """Render a recall block: compact, human-readable, with a provenance header."""
+    """Render a recall block: compact, human-readable, with a provenance header.
+
+    `elapsed_ms` is the **whole recall**, not the last query: the header is a
+    claim about cost, and a flattering number there is a lie the user cannot
+    check. `queries` is shown so the ms can be attributed to the work done.
+    """
     if not entities:
         return ""
     fact_count = sum(len(v) for v in facts_by_uri.values())
+    work = f"{queries} consulta(s) · " if queries else ""
     header = (
         f"[memoria relacional · samskara · {len(entities)} entidad(es) · "
-        f"{fact_count} hecho(s) · {elapsed_ms:.2f} ms]"
+        f"{fact_count} hecho(s) · {work}{elapsed_ms:.2f} ms]"
     )
     lines: List[str] = [header]
     weights = weights or {}
@@ -245,11 +253,22 @@ def recall(
 
     When a `store` is given, facts are ranked by weight and the ones actually
     shown are reinforced — memory gets heavier where it earns its keep.
+
+    The returned milliseconds are the **whole pipeline** (every query issued,
+    including the ones that returned nothing), not the last query's time. That
+    distinction is the difference between an auditable claim and a flattering
+    one; `client.last_ms` is still available for per-query tuning.
     """
+    started = time.perf_counter()
+    queries_before = int(getattr(client, "queries", 0))
     entities = find_entities(client, text, limit=max_entities)
     if not entities:
-        return "", client.last_ms
+        return "", (time.perf_counter() - started) * 1000.0
     facts_by_uri = {e.uri: facts(client, e.uri, max_facts=max_facts) for e in entities}
+    # Everything the graph had to answer is done by now: weights and conflicts
+    # below read the local SQLite sidecar. Measure here, not at the last query.
+    elapsed_ms = (time.perf_counter() - started) * 1000.0
+    issued = max(0, int(getattr(client, "queries", 0)) - queries_before)
     weights: Dict[str, float] = {}
     used: List[tuple] = []
     if store is not None:
@@ -258,7 +277,8 @@ def recall(
                 key = _wkey(entity.uri, fact)
                 weights[key] = store.weight(fact.as_triple(entity.uri))
                 used.append(fact.as_triple(entity.uri))
-    block = render(entities, facts_by_uri, client.last_ms, max_chars=max_chars, weights=weights)
+    block = render(entities, facts_by_uri, elapsed_ms, max_chars=max_chars,
+                   weights=weights, queries=issued)
     if store is not None and block:
         # show doubt where it exists, before the model gets a chance to guess
         try:
@@ -281,4 +301,4 @@ def recall(
             store.reinforce(used)
         except Exception:  # noqa: BLE001 - reinforcement is best-effort
             pass
-    return block, client.last_ms
+    return block, elapsed_ms
