@@ -1,4 +1,4 @@
-PREFIX ws: <http://wagnersolutions.cl/shiva/>
+PREFIX ws: <https://wsolutionsai.com/ns/shiva/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?proyecto ?proyectoLabel ?decision ?decisionLabel ?estado ?incidenteLabel ?impacto
 WHERE {

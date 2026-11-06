@@ -17,7 +17,7 @@ from typing import Dict, List, Optional, Tuple
 
 # Ontology prefixes exported for query builders and for the user's own queries.
 PREFIXES = {
-    "ws": "http://wagnersolutions.cl/shiva/",
+    "ws": "https://wsolutionsai.com/ns/shiva/",
     "rdfs": "http://www.w3.org/2000/01/rdf-schema#",
     "rdf": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
     "xsd": "http://www.w3.org/2001/XMLSchema#",

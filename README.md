@@ -150,7 +150,7 @@ Any RDF works: entity resolution only needs `rdfs:label` on the things you want
 to find. The bundled demo corpus uses this prefix:
 
 ```
-ws:  http://wagnersolutions.cl/shiva/
+ws:  https://wsolutionsai.com/ns/shiva/
 ```
 
 Change it in `samskara_core/client.py` (`PREFIXES`) or pass full IRIs.
