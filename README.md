@@ -19,6 +19,21 @@ answer. Memory you cannot audit is memory you cannot trust.
 
 ---
 
+## Demo
+
+[![Samskara demo — the agent finds two contradictory facts and declines to choose](docs/demo/demo.gif)](https://github.com/SebaWag/hermes-samskara/releases/download/v0.2.0/SAMSKARA_DEMO.mp4)
+
+*The agent is asked whether a decision from months ago is still in force. It finds
+two contradictory facts, weights them, and says so instead of picking one.*
+
+**[▶ Watch the full 66-second demo with audio](https://github.com/SebaWag/hermes-samskara/releases/download/v0.2.0/SAMSKARA_DEMO.mp4)**
+
+| Recall with provenance | Weights that decay | Conflicts surfaced |
+|---|---|---|
+| ![](docs/demo/01-status.jpg) | ![](docs/demo/02-weights.jpg) | ![](docs/demo/03-conflict.jpg) |
+
+---
+
 ## Why a graph instead of another vector store
 
 | | Vector memory | Samskara |
