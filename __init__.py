@@ -397,6 +397,17 @@ class SamskaraMemoryProvider(MemoryProvider):
             {
                 "type": "function",
                 "function": {
+                    "name": "samskara_conflicts",
+                    "description": (
+                        "List facts where memory holds two contradictory versions of the "
+                        "same attribute. Use it before asserting something that may be disputed."
+                    ),
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            },
+            {
+                "type": "function",
+                "function": {
                     "name": "samskara_status",
                     "description": "Health and telemetry of the relational memory backend.",
                     "parameters": {"type": "object", "properties": {}},
@@ -416,6 +427,8 @@ class SamskaraMemoryProvider(MemoryProvider):
                 str(args.get("predicate", "")),
                 str(args.get("object", "")),
             )
+        if tool_name == "samskara_conflicts":
+            return self._tool_conflicts()
         if tool_name == "samskara_status":
             return self._tool_status()
         raise NotImplementedError(f"samskara does not handle tool {tool_name}")
@@ -582,6 +595,16 @@ class SamskaraMemoryProvider(MemoryProvider):
     def _tool_write(self, subject: str, predicate: str, obj: str) -> str:
         if not subject or not predicate or not obj:
             return "samskara: write needs subject, predicate and object."
+        # An explicit write is the strongest signal we get: weigh it accordingly.
+        if self._facts is not None:
+            try:
+                self._facts.record(
+                    [(expand(subject), expand(predicate), expand(obj))],
+                    session_id=self._session_id,
+                    confidence=0.9,
+                )
+            except Exception:  # noqa: BLE001
+                pass
         written = self._append([(subject, predicate, obj)])
         if not written:
             return "samskara: write rejected (journal unavailable)."
@@ -595,6 +618,23 @@ class SamskaraMemoryProvider(MemoryProvider):
             f"samskara: fact queued ({subject} {local_name(predicate)} {obj}). "
             f"{pending} triple(s) pending reindex."
         )
+
+    def _tool_conflicts(self) -> str:
+        if self._facts is None:
+            return "samskara: weight store unavailable"
+        try:
+            rows = self._facts.conflicts(limit=50)
+        except Exception as exc:  # noqa: BLE001
+            return f"samskara: could not read conflicts ({exc})"
+        if not rows:
+            return "samskara: no conflicts — every attribute has a single value."
+        lines = [f"samskara: {len(rows)} fact(s) in conflict"]
+        for fact in rows:
+            lines.append(
+                f"  {local_name(fact.subject)} · {local_name(fact.predicate)} = "
+                f"{fact.object.strip(chr(34))}  (peso {fact.weight:.2f}, {fact.sessions} sesión/es)"
+            )
+        return "\n".join(lines)
 
     def _tool_status(self) -> str:
         healthy = self._client.healthy() if self._client else False

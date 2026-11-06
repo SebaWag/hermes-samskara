@@ -211,6 +211,21 @@ def render(
     return block
 
 
+def render_conflicts(conflicts: Sequence, max_items: int = 4) -> str:
+    """Say the doubt out loud instead of silently picking a side."""
+    if not conflicts:
+        return ""
+    lines = ["[conflicto · dos versiones del mismo hecho, no elijo por ti]"]
+    for fact in list(conflicts)[:max_items]:
+        subject = local_name(str(getattr(fact, "subject", "")))
+        predicate = local_name(str(getattr(fact, "predicate", "")))
+        value = str(getattr(fact, "object", "")).strip('"')
+        weight = float(getattr(fact, "weight", 0.0))
+        sessions = int(getattr(fact, "sessions", 1))
+        lines.append(f"   {subject} · {humanize(predicate)} = {value}  (peso {weight:.2f}, {sessions} sesión/es)")
+    return "\n".join(lines)
+
+
 def _wkey(entity_uri: str, fact: "Fact") -> str:
     """Stable key for a fact's weight, matching facts.triple_hash()."""
     from .facts import triple_hash
@@ -244,6 +259,23 @@ def recall(
                 weights[key] = store.weight(fact.as_triple(entity.uri))
                 used.append(fact.as_triple(entity.uri))
     block = render(entities, facts_by_uri, client.last_ms, max_chars=max_chars, weights=weights)
+    if store is not None and block:
+        # show doubt where it exists, before the model gets a chance to guess
+        try:
+            conflicting = []
+            seen_pairs = set()
+            for entity in entities:
+                for fact in facts_by_uri.get(entity.uri, []):
+                    pair = (entity.uri, fact.predicate_uri)
+                    if pair in seen_pairs or not fact.predicate_uri:
+                        continue
+                    seen_pairs.add(pair)
+                    conflicting.extend(store.conflicts_for(*pair))
+            notice = render_conflicts(conflicting)
+            if notice:
+                block = block + "\n" + notice
+        except Exception:  # noqa: BLE001 - doubt is a bonus, never a crash
+            pass
     if store is not None and block:
         try:
             store.reinforce(used)

@@ -213,6 +213,39 @@ inference that changes nothing is a smell.
 
 ---
 
+## Three layers that make it memory, not a cache
+
+**1. It deduces.** An ontology with subsumption, materialised at reindex time:
+`Incidente ⊑ Evento`, `BaseDeDatos ⊑ Tecnologia`, `usaTecnologia ⊑ dependeDe`. Ask
+"what events happened?" and incidents come back; ask "what does X depend on?" and
+you get stack and infrastructure in one query.
+
+**2. It weighs.** Every fact carries a weight:
+
+```
+peso = 0.5·confianza + repetición + 0.2·recencia + refuerzo por uso
+```
+
+- an explicit write by the user weighs more than an extraction (0.9 vs 0.65),
+  and both more than an import (0.5);
+- every recall that uses a fact **reinforces** it (measured: 0.45 → 0.55 after one
+  turn, while unused facts stayed put);
+- a fact nobody touches for 30 days starts to **decay** — nothing is deleted,
+  everything can lose weight.
+
+**3. It admits doubt.** Two contradictory values for the same attribute are both
+kept and flagged. The agent then says so instead of guessing:
+
+> *"No está claro: mi memoria guarda dos estados contradictorios para esa
+> decisión ('descongelado', peso 0.65, y 'vigente', peso 0.45). No elijo por ti."*
+
+```bash
+python tools/weights.py report      # what weighs most, what is fading
+python tools/weights.py conflicts   # where memory disagrees with itself
+```
+
+---
+
 ## Scope & safety — what this plugin does *not* do
 
 Installing Samskara gives you a copy of this software and nothing else. It is

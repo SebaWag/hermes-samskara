@@ -272,6 +272,17 @@ class FactStore:
             ).fetchall()
         return [self._to_fact(row) for row in rows]
 
+    def conflicts_for(self, subject: str, predicate: str) -> List[Fact]:
+        """Every conflicting value for one attribute — the two sides of a doubt."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                """SELECT * FROM facts
+                   WHERE subject = ? AND predicate = ? AND status = 'conflict'
+                   ORDER BY weight DESC""",
+                (subject, predicate),
+            ).fetchall()
+        return [self._to_fact(row) for row in rows]
+
     def top(self, limit: int = 10) -> List[Fact]:
         with self._connect() as conn:
             rows = conn.execute("SELECT * FROM facts ORDER BY weight DESC LIMIT ?", (limit,)).fetchall()
