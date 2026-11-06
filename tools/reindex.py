@@ -28,6 +28,11 @@ import sys
 import time
 from pathlib import Path
 
+REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO))
+
+from samskara_core.ontology import Ontology, materialise_nt  # noqa: E402
+
 DEFAULT_IMAGE = "imfd/millenniumdb:latest"
 
 
@@ -56,6 +61,8 @@ def main() -> int:
     ap.add_argument("--container", default="", help="Running server container to stop/start (optional)")
     ap.add_argument("--image", default=DEFAULT_IMAGE)
     ap.add_argument("--keep-merged", action="store_true", help="Keep the merged .nt file after import")
+    ap.add_argument("--no-infer", action="store_true", help="Skip ontology materialisation (types closure)")
+    ap.add_argument("--force", action="store_true", help="Rebuild even with no pending journals (e.g. after editing the ontology)")
     ap.add_argument("--dry-run", action="store_true")
     args = ap.parse_args()
 
@@ -72,8 +79,8 @@ def main() -> int:
     print(f"journal-dir: {journal_dir}")
     print(f"journals   : {len(journals)} file(s), {pending} pending triple(s)")
 
-    if not pending:
-        print("nothing to do — the graph is already up to date")
+    if not pending and not args.force:
+        print("nothing to do — the graph is already up to date (use --force to re-run inference)")
         return 0
     if not db_dir.is_dir():
         sys.exit(f"no database at {db_dir} — import a corpus first (see README)")
@@ -97,6 +104,12 @@ def main() -> int:
                 out.write("\n")
             for journal in journals:
                 out.write(journal.read_text(encoding="utf-8"))
+        if not args.no_infer:
+            ontology = Ontology()
+            before, added = materialise_nt(merged.read_text(encoding="utf-8"), ontology)
+            if added:
+                merged.write_text(before, encoding="utf-8")
+                print(f"      + {added} inferred triple(s) from {ontology.describe()}")
         merged_lines = len(merged.read_text(encoding="utf-8").splitlines())
         total_lines = len(dump_file.read_text(encoding="utf-8").splitlines())
 

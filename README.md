@@ -187,6 +187,32 @@ python tests/integration_graph.py <endpoint>     # needs a live graph
 
 ---
 
+## The ontology: memory with weight
+
+Labels alone are a bag of strings. Samskara declares a small hierarchy
+(`samskara_core/ontology.py`, one readable file) and **materialises the closure
+at reindex time** — so reads stay plain SPARQL at ~0.1 ms, with no reasoning in
+the hot path:
+
+```
+Incidente ⊑ Evento ⊑ Ocurrencia ⊑ Entidad
+BaseDeDatos ⊑ Tecnologia ⊑ Artefacto ⊑ Entidad
+usaTecnologia ⊑ dependeDe ⊑ relacionadoCon
+```
+
+What that buys you, concretely:
+
+| You ask | Without a hierarchy | With Samskara |
+|---|---|---|
+| "what events happened?" | misses incidents (they are typed `Incidente`) | ✅ includes them |
+| "what technologies does X use?" | misses `BaseDeDatos` nodes | ✅ includes them |
+| "what does X depend on?" | one query per predicate | ✅ `(dependeDe\|usaTecnologia\|desplegadoEn)` in one |
+
+The closure is printed on every reindex (`+ 35 inferred triple(s)`), because
+inference that changes nothing is a smell.
+
+---
+
 ## Scope & safety — what this plugin does *not* do
 
 Installing Samskara gives you a copy of this software and nothing else. It is

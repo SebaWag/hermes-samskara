@@ -14,10 +14,10 @@ ws:owner a ws:Persona ; rdfs:label "Team owner" ; ws:rol "arquitecto" .
 ws:backend_dev a ws:Persona ; rdfs:label "Backend dev" ; ws:rol "backend" .
 
 # ── Tecnologías ─────────────────────────────────────────────
-ws:postgresql a ws:Tecnologia ; rdfs:label "PostgreSQL" ; ws:versionActual "15" .
+ws:postgresql a ws:BaseDeDatos ; rdfs:label "PostgreSQL" ; ws:versionActual "15" .
 ws:docker a ws:Tecnologia ; rdfs:label "Docker" .
 ws:nodejs a ws:Tecnologia ; rdfs:label "Node.js" .
-ws:millenniumdb a ws:Tecnologia ; rdfs:label "MillenniumDB" .
+ws:millenniumdb a ws:BaseDeDatos ; rdfs:label "MillenniumDB" .
 ws:hermes_agent a ws:Tecnologia ; rdfs:label "Hermes Agent" .
 ws:python a ws:Tecnologia ; rdfs:label "Python" .
 
@@ -41,7 +41,7 @@ ws:samskara a ws:Proyecto ; rdfs:label "Samskara" ;
     ws:estado "desarrollo" .
 
 # ── El incidente (el porqué de la regla) ────────────────────
-ws:inc_2026_03_pg_upgrade a ws:Evento ;
+ws:inc_2026_03_pg_upgrade a ws:Incidente ;
     rdfs:label "El upgrade a PostgreSQL 16 rompió la réplica de lectura" ;
     ws:ocurrioEn ws:onboarding_hub ;
     ws:fecha "2026-03" ;
