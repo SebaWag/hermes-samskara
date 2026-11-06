@@ -1,0 +1,13 @@
+PREFIX ws: <http://wagnersolutions.cl/shiva/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?proyecto ?proyectoLabel ?decision ?decisionLabel ?estado ?incidenteLabel ?impacto
+WHERE {
+  ?proyecto ws:usaTecnologia ws:postgresql ;
+            rdfs:label ?proyectoLabel .
+  ?decision ws:sobreProyecto ?proyecto ;
+            rdfs:label ?decisionLabel ;
+            ws:estado ?estado ;
+            ws:motivadaPor ?incidente .
+  ?incidente rdfs:label ?incidenteLabel ;
+             ws:impacto ?impacto .
+}

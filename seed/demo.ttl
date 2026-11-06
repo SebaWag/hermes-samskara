@@ -1,0 +1,72 @@
+@prefix ws:   <http://wagnersolutions.cl/shiva/> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+
+# ─────────────────────────────────────────────────────────────
+# SAMSKARA — corpus de demo (grafo de memoria relacional)
+# Escenario: un equipo dev real, con proyectos, incidentes y decisiones.
+# Diseñado para que una pregunta de 2-3 saltos NO se pueda responder
+# con búsqueda vectorial: requiere cruzar proyecto → incidente → decisión.
+# ─────────────────────────────────────────────────────────────
+
+# ── Personas ────────────────────────────────────────────────
+ws:seba a ws:Persona ; rdfs:label "Sebastián" ; ws:rol "arquitecto" .
+ws:maria a ws:Persona ; rdfs:label "María" ; ws:rol "backend" .
+
+# ── Tecnologías ─────────────────────────────────────────────
+ws:postgresql a ws:Tecnologia ; rdfs:label "PostgreSQL" ; ws:versionActual "15" .
+ws:docker a ws:Tecnologia ; rdfs:label "Docker" .
+ws:nodejs a ws:Tecnologia ; rdfs:label "Node.js" .
+ws:millenniumdb a ws:Tecnologia ; rdfs:label "MillenniumDB" .
+ws:hermes_agent a ws:Tecnologia ; rdfs:label "Hermes Agent" .
+ws:python a ws:Tecnologia ; rdfs:label "Python" .
+
+# ── Infraestructura ─────────────────────────────────────────
+ws:hetzner_ws a ws:Infraestructura ; rdfs:label "VPS Hetzner" ; ws:ramGb "15" .
+ws:oracle_konektor a ws:Infraestructura ; rdfs:label "VPS Oracle" ; ws:ramGb "23" .
+
+# ── Proyectos ───────────────────────────────────────────────
+ws:onboarding_hub a ws:Proyecto ; rdfs:label "Onboarding Hub" ;
+    ws:usaTecnologia ws:postgresql , ws:docker , ws:nodejs ;
+    ws:desplegadoEn ws:hetzner_ws ;
+    ws:estado "produccion" .
+
+ws:expediente a ws:Proyecto ; rdfs:label "Expediente" ;
+    ws:usaTecnologia ws:postgresql , ws:millenniumdb ;
+    ws:desplegadoEn ws:oracle_konektor ;
+    ws:estado "produccion" .
+
+ws:samskara a ws:Proyecto ; rdfs:label "Samskara" ;
+    ws:usaTecnologia ws:millenniumdb , ws:hermes_agent , ws:python ;
+    ws:estado "desarrollo" .
+
+# ── El incidente (el porqué de la regla) ────────────────────
+ws:inc_2026_03_pg_upgrade a ws:Evento ;
+    rdfs:label "El upgrade a PostgreSQL 16 rompió la réplica de lectura" ;
+    ws:ocurrioEn ws:onboarding_hub ;
+    ws:fecha "2026-03" ;
+    ws:impacto "2 h de lecturas degradadas" ;
+    ws:afectoTecnologia ws:postgresql .
+
+# ── La decisión que sigue vigente ───────────────────────────
+ws:dec_congelar_pg a ws:Decision ;
+    rdfs:label "Congelar PostgreSQL en 15 hasta migrar las réplicas lógicas" ;
+    ws:sobreProyecto ws:onboarding_hub , ws:expediente ;
+    ws:motivadaPor ws:inc_2026_03_pg_upgrade ;
+    ws:estado "vigente" ;
+    ws:aprobadaPor ws:seba ;
+    ws:fecha "2026-03" .
+
+# ── Contexto del hackathon ──────────────────────────────────
+ws:hackathon_hermes_2026 a ws:Evento ;
+    rdfs:label "Hermes Agent Plugin Hackathon" ;
+    ws:organiza "Nous Research" ;
+    ws:requiereTecnologia ws:hermes_agent ;
+    ws:participa ws:seba ;
+    ws:entrega ws:samskara ;
+    ws:fechaLimite "2026-11-11" .
+
+# ── Participación ───────────────────────────────────────────
+ws:seba ws:participaEn ws:onboarding_hub , ws:expediente , ws:samskara .
+ws:maria ws:participaEn ws:onboarding_hub .
+ws:seba ws:mantiene ws:hetzner_ws , ws:oracle_konektor .

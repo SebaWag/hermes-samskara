@@ -1,0 +1,3 @@
+name: samskara
+version: "0.1.0"
+description: "Relational memory for Hermes — multi-hop recall over a knowledge graph, with the source of every fact attached. Beyond vector search: crosses project → incident → decision in one query."
