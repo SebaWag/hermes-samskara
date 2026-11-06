@@ -24,7 +24,7 @@ QUESTIONS = [
 
 
 def main() -> int:
-    endpoint = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:1235/sparql"
+    endpoint = sys.argv[1] if len(sys.argv) > 1 else "http://127.0.0.1:1234/sparql"
     client = SparqlClient(endpoint, timeout=8.0)
     print(f"endpoint : {client.endpoint}")
     print(f"healthy  : {client.healthy()}")

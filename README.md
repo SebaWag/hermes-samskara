@@ -187,6 +187,33 @@ python tests/integration_graph.py <endpoint>     # needs a live graph
 
 ---
 
+## Scope & safety — what this plugin does *not* do
+
+Installing Samskara gives you a copy of this software and nothing else. It is
+worth being explicit about that, because "memory provider" means it handles
+everything you have told your agent:
+
+- **No telemetry.** No analytics endpoint, no phone-home, no counters.
+- **No outbound network calls** other than the graph endpoint *you* configure
+  (default `http://127.0.0.1:1234/sparql`). Grep for yourself: `client.py` is
+  the only module that opens a socket.
+- **No bundled data beyond the demo corpus.** `seed/demo.ttl` is a synthetic
+  example (fictional projects, generic infrastructure). Your graph is not in
+  this repository and is never uploaded.
+- **Writes stay local.** The journal is written to *your* `$HERMES_HOME`.
+- **No self-updater.** Updates only flow through a catalog SHA bump, so an
+  installed copy cannot silently move to a commit nobody reviewed.
+- **Read-only tool surface.** `samskara_query` rejects anything that is not
+  `SELECT`/`ASK`: a model cannot rewrite your memory graph with a tool call.
+
+If you run the graph yourself, bind it to loopback:
+
+```bash
+-p 127.0.0.1:1234:1234   # not 0.0.0.0 — memory is not a public service
+```
+
+---
+
 ## Limitations (honest list)
 
 - **Single write path.** Concurrent writers to the same journal should serialise

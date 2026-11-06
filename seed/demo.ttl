@@ -10,8 +10,8 @@
 # ─────────────────────────────────────────────────────────────
 
 # ── Personas ────────────────────────────────────────────────
-ws:seba a ws:Persona ; rdfs:label "Sebastián" ; ws:rol "arquitecto" .
-ws:maria a ws:Persona ; rdfs:label "María" ; ws:rol "backend" .
+ws:owner a ws:Persona ; rdfs:label "Team owner" ; ws:rol "arquitecto" .
+ws:backend_dev a ws:Persona ; rdfs:label "Backend dev" ; ws:rol "backend" .
 
 # ── Tecnologías ─────────────────────────────────────────────
 ws:postgresql a ws:Tecnologia ; rdfs:label "PostgreSQL" ; ws:versionActual "15" .
@@ -22,18 +22,18 @@ ws:hermes_agent a ws:Tecnologia ; rdfs:label "Hermes Agent" .
 ws:python a ws:Tecnologia ; rdfs:label "Python" .
 
 # ── Infraestructura ─────────────────────────────────────────
-ws:hetzner_ws a ws:Infraestructura ; rdfs:label "VPS Hetzner" ; ws:ramGb "15" .
-ws:oracle_konektor a ws:Infraestructura ; rdfs:label "VPS Oracle" ; ws:ramGb "23" .
+ws:primary_vps a ws:Infraestructura ; rdfs:label "Primary VPS" .
+ws:backup_vps a ws:Infraestructura ; rdfs:label "Backup VPS" .
 
 # ── Proyectos ───────────────────────────────────────────────
 ws:onboarding_hub a ws:Proyecto ; rdfs:label "Onboarding Hub" ;
     ws:usaTecnologia ws:postgresql , ws:docker , ws:nodejs ;
-    ws:desplegadoEn ws:hetzner_ws ;
+    ws:desplegadoEn ws:primary_vps ;
     ws:estado "produccion" .
 
-ws:expediente a ws:Proyecto ; rdfs:label "Expediente" ;
+ws:ledger_app a ws:Proyecto ; rdfs:label "Ledger App" ;
     ws:usaTecnologia ws:postgresql , ws:millenniumdb ;
-    ws:desplegadoEn ws:oracle_konektor ;
+    ws:desplegadoEn ws:backup_vps ;
     ws:estado "produccion" .
 
 ws:samskara a ws:Proyecto ; rdfs:label "Samskara" ;
@@ -51,10 +51,10 @@ ws:inc_2026_03_pg_upgrade a ws:Evento ;
 # ── La decisión que sigue vigente ───────────────────────────
 ws:dec_congelar_pg a ws:Decision ;
     rdfs:label "Congelar PostgreSQL en 15 hasta migrar las réplicas lógicas" ;
-    ws:sobreProyecto ws:onboarding_hub , ws:expediente ;
+    ws:sobreProyecto ws:onboarding_hub , ws:ledger_app ;
     ws:motivadaPor ws:inc_2026_03_pg_upgrade ;
     ws:estado "vigente" ;
-    ws:aprobadaPor ws:seba ;
+    ws:aprobadaPor ws:owner ;
     ws:fecha "2026-03" .
 
 # ── Contexto del hackathon ──────────────────────────────────
@@ -62,11 +62,11 @@ ws:hackathon_hermes_2026 a ws:Evento ;
     rdfs:label "Hermes Agent Plugin Hackathon" ;
     ws:organiza "Nous Research" ;
     ws:requiereTecnologia ws:hermes_agent ;
-    ws:participa ws:seba ;
+    ws:participa ws:owner ;
     ws:entrega ws:samskara ;
     ws:fechaLimite "2026-11-11" .
 
 # ── Participación ───────────────────────────────────────────
-ws:seba ws:participaEn ws:onboarding_hub , ws:expediente , ws:samskara .
-ws:maria ws:participaEn ws:onboarding_hub .
-ws:seba ws:mantiene ws:hetzner_ws , ws:oracle_konektor .
+ws:owner ws:participaEn ws:onboarding_hub , ws:ledger_app , ws:samskara .
+ws:backend_dev ws:participaEn ws:onboarding_hub .
+ws:owner ws:mantiene ws:primary_vps , ws:backup_vps .
