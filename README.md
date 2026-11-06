@@ -124,6 +124,10 @@ No graph server. No Docker. No API key. No network. `tools/demo.py` parses the
 before a turn — you get the weighted block, the reinforcement, and the conflict,
 in about a second.
 
+![Samskara in one command: no server, no key, no network](docs/demo/first-minute.gif)
+
+*Recorded from a real run. Lines skipped for length are marked with `⋮`.*
+
 ```
 1) ¿puedo subir PostgreSQL a la 17 en Onboarding Hub?
 [memoria relacional · samskara · 3 entidad(es) · 18 hecho(s) · 10 consulta(s) · 0.18 ms]
