@@ -51,6 +51,15 @@ from samskara_core import (  # noqa: E402  (import after sys.path bootstrap)
     recall as run_recall,
     reindex_commands,
 )
+from samskara_core.extract import DEFAULT_NAMESPACE, Extractor  # noqa: E402
+from samskara_core.llm import make_llm  # noqa: E402
+from samskara_core.reconcile import LabelIndex  # noqa: E402
+from samskara_core.schema import SchemaRegistry  # noqa: E402
+from samskara_core.sessions import SessionContext  # noqa: E402
+
+# Set by register(ctx): lets the provider use the host's model (ctx.llm)
+# without ever touching a credential.
+_CTX: Any = None
 
 log = logging.getLogger("samskara")
 
@@ -62,6 +71,7 @@ DEFAULTS: Dict[str, Any] = {
     "max_chars": 1200,
     "auto_recall": True,
     "write_mode": "journal",
+    "extract_on_session_end": True,
     "username": "",
     "password": "",
 }
@@ -76,6 +86,7 @@ class SamskaraMemoryProvider(MemoryProvider):
         self._cfg: Dict[str, Any] = dict(DEFAULTS)
         self._client: Optional[SparqlClient] = None
         self._journal: Optional[Journal] = None
+        self._registry: Optional[SchemaRegistry] = None
         self._session_id: str = ""
         self._hermes_home: str = ""
         self._turns: List[Dict[str, str]] = []
@@ -110,6 +121,9 @@ class SamskaraMemoryProvider(MemoryProvider):
             password=self._cfg["password"],
         )
         self._journal = Journal(Path(self._journal_dir()), session_id=self._session_id)
+        # The vocabulary is per-user and grows with their data.
+        schema_path = Path(self._journal_dir()).parent / "schema.json"
+        self._registry = SchemaRegistry(schema_path)
         log.info(
             "samskara ready: endpoint=%s session=%s journal=%s",
             self._client.endpoint,
@@ -207,15 +221,53 @@ class SamskaraMemoryProvider(MemoryProvider):
         )
 
     def on_session_end(self, messages: List[Dict[str, Any]]) -> None:
-        text = self._messages_to_text(messages) or self._buffered_text()
-        if not text.strip() or not self._client:
+        """Extract durable relations from the session that just ended.
+
+        This is what makes the graph grow by itself: the model reads the
+        conversation, proposes typed triples against a learnable vocabulary, and
+        we journal them. Validation happens in `extract.validate` — unknown
+        predicates are proposed, not accepted, and every edge keeps provenance.
+        """
+        if not self._cfg.get("extract_on_session_end", True):
             return
-        try:
-            entities = find_entities(self._client, text, limit=10)
-        except Exception:  # noqa: BLE001
+        pairs = [
+            (m.get("role", ""), m.get("content", ""))
+            for m in (messages or [])
+            if m.get("role") in {"user", "assistant"} and isinstance(m.get("content"), str) and m["content"].strip()
+        ]
+        if not pairs:
             return
-        session_node = self._session_node()
-        self._append([(session_node, "ws:menciona", e.uri) for e in entities])
+
+        llm = make_llm(_CTX)
+        triples: List[tuple] = []
+        if getattr(llm, "available", False):
+            try:
+                ctx = SessionContext(session_id=self._session_id or "session", messages=pairs)
+                index = LabelIndex().load_from_client(self._client) if self._client else LabelIndex()
+                result = Extractor(self._registry, llm, DEFAULT_NAMESPACE, index=index).extract(ctx)
+                triples = result.triples
+                if result.rejected:
+                    log.debug("samskara: %d item(s) rejected during extraction", len(result.rejected))
+                if result.proposed:
+                    log.info("samskara: new predicates registered: %s", ", ".join(result.proposed))
+                self._registry.save()
+            except Exception as exc:  # noqa: BLE001 - never break session close
+                self._stats["errors"] += 1
+                log.debug("extraction failed: %s", exc)
+
+        # Fallback (and complement): at minimum, record what the session was about.
+        if self._client:
+            try:
+                entities = find_entities(self._client, "\n".join(c for _, c in pairs), limit=10)
+                session_node = self._session_node()
+                triples.extend((session_node, "ws:menciona", e.uri) for e in entities)
+            except Exception:  # noqa: BLE001
+                pass
+
+        if triples:
+            written = self._append(triples)
+            log.info("samskara: %d triple(s) journalled at session end", written)
+            self._stats["extracted"] = self._stats.get("extracted", 0) + written
 
     def on_delegation(self, task: str, result: str, *, child_session_id: str = "", **kwargs) -> None:
         """Keep the delegation edge: who asked whom, for what."""
@@ -240,6 +292,9 @@ class SamskaraMemoryProvider(MemoryProvider):
         self._session_id = new_session_id or self._session_id
         if self._journal is not None:
             self._journal = Journal(Path(self._journal_dir()), session_id=self._session_id)
+        # The vocabulary is per-user and grows with their data.
+        schema_path = Path(self._journal_dir()).parent / "schema.json"
+        self._registry = SchemaRegistry(schema_path)
         with self._lock:
             self._turns.clear()
 
@@ -545,4 +600,6 @@ class SamskaraMemoryProvider(MemoryProvider):
 
 def register(ctx) -> None:
     """Hermes entry point for a memory-provider plugin."""
+    global _CTX
+    _CTX = ctx
     ctx.register_memory_provider(SamskaraMemoryProvider())

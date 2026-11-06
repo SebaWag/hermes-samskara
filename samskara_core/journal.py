@@ -17,10 +17,34 @@ import threading
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
+from .client import PREFIXES
+
 Triple = Tuple[str, str, str]
 
 _URI_PREFIXES = ("http://", "https://", "urn:", "ws:", "rdfs:", "rdf:", "xsd:")
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9_.:-]+$")
+
+
+def expand(term: str) -> str:
+    """`ws:onboarding_hub` -> `https://wsolutionsai.com/ns/shiva/onboarding_hub`.
+
+    The journal is merged into an N-Triples dump, and N-Triples has no prefix
+    mechanism: a prefixed name in a journal is unreadable once concatenated.
+    So the write path stores absolute identifiers, always.
+    """
+    for prefix, namespace in PREFIXES.items():
+        if term.startswith(prefix + ":"):
+            return namespace + term[len(prefix) + 1:]
+    return term
+
+
+def as_term(token: str) -> str:
+    """Wrap a URI in angle brackets, as N-Triples requires."""
+    if token.startswith("<") and token.endswith(">"):
+        return token
+    if token.lower().startswith(("http://", "https://", "urn:")):
+        return f"<{token}>"
+    return token  # unknown prefix: leave it alone rather than corrupt it
 
 
 def _escape_literal(value: str) -> str:
@@ -35,10 +59,11 @@ def render_triple(triple: Triple) -> str:
     obj = (obj or "").strip()
     if not subject or not predicate:
         raise ValueError("triple needs a subject and a predicate")
+    subject, predicate = as_term(expand(subject)), as_term(expand(predicate))
     if obj.startswith('"') and obj.endswith('"') and len(obj) > 1:
         obj_token = obj  # already a literal: pass through untouched
     elif obj.lower().startswith(_URI_PREFIXES) or (":" in obj and _SAFE_NAME.match(obj)):
-        obj_token = obj
+        obj_token = as_term(expand(obj))
     else:
         obj_token = '"' + _escape_literal(obj) + '"'
     return f"{subject} {predicate} {obj_token} ."
@@ -51,6 +76,9 @@ class Journal:
         self.directory = Path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         safe_session = re.sub(r"[^A-Za-z0-9_.-]", "_", session_id or "default")[:64]
+        # Collapse dot runs: `..` is harmless once separators are gone, but a
+        # filename should never look like a traversal attempt.
+        safe_session = re.sub(r"\.{2,}", "_", safe_session).strip("._") or "default"
         self.path = self.directory / f"session-{safe_session}.ttl"
         self._lock = threading.Lock()
 
