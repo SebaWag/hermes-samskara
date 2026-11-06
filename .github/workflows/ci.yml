@@ -40,7 +40,7 @@ jobs:
       - name: Install pytest
         run: python -m pip install --upgrade pip pytest
 
-      - name: Unit tests (offline: no graph, no network, no Hermes)
+      - name: "Unit tests (offline: no graph, no network, no Hermes)"
         run: python -m pytest tests/ -q
 
       - name: Manifest sanity
