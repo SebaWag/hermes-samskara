@@ -273,6 +273,23 @@ If you run the graph yourself, bind it to loopback:
 
 ---
 
+## Costs & disclosure
+
+Being explicit about this is cheaper than being asked in review:
+
+- **Session-end extraction** (on by default) makes **one model call per session**
+  through `ctx.llm` — the host's own model and credentials, with **no provider
+  override**. With a fast model that is a fraction of a cent per session. Turn it
+  off with `extract_on_session_end: false` if you only want manual writes.
+- The **only** other network call is the graph endpoint you configure.
+- No telemetry, no self-updater, no bundled data.
+- **Extraction is plausible, not certain.** It can produce an edge that is wrong.
+  That is exactly why facts carry a weight (extraction 0.65 < explicit write 0.90)
+  and why contradictions are flagged instead of overwritten. A review queue for
+  pending facts is the next thing to build — today the weight is what protects you.
+
+---
+
 ## Limitations (honest list)
 
 - **Single write path.** Concurrent writers to the same journal should serialise

@@ -1,0 +1,35 @@
+# Catalog entry — the file that goes into NousResearch/hermes-agent as
+# plugin-catalog/samskara.yaml. Kept here so the text lives with the code it
+# describes. The `sha` must be the full 40 characters of the commit being
+# submitted; any change to the plugin is a new PR with a new pin.
+name: samskara
+repo: https://github.com/SebaWag/hermes-samskara
+sha: 3faec09018b0b744ccb5ce4b6efdf9fe952a6d04
+version: "0.2.0"
+description: >-
+  Relational memory provider backed by a knowledge graph (MillenniumDB or any
+  SPARQL endpoint): multi-hop recall with provenance on every fact, an ontology
+  that infers subsumption (Incidente ⊑ Evento) at reindex time, per-fact weights
+  that are reinforced by use and decay with disuse, and explicit conflict
+  reporting — when two values disagree, the agent says so instead of guessing.
+  Onboarding backfills the graph from the sessions the agent already had
+  (state.db, read-only) and reconciles new entities against existing ones.
+  Disclosure — with session-end extraction enabled (default), the plugin sends
+  the recent turns of a session to the user's own model through ctx.llm
+  (host-owned credentials, no provider override) to extract facts; nothing else
+  leaves the machine. No telemetry. The graph endpoint defaults to loopback and
+  is the only other network call.
+maintainer: SebaWag
+tier: community
+category: memory
+docs_url: https://github.com/SebaWag/hermes-samskara#readme
+capabilities:
+  provides_tools:
+    - samskara_search
+    - samskara_query
+    - samskara_write
+    - samskara_conflicts
+    - samskara_status
+  provides_hooks: []
+  provides_middleware: []
+  requires_env: []
