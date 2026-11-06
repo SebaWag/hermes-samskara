@@ -7,6 +7,7 @@ from .reconcile import LabelIndex, Resolution, normalize_label
 from .schema import SchemaRegistry, slug
 from .sessions import SessionContext, SessionReader
 from .extract import Extractor, ExtractionResult, validate
+from .facts import Fact as WeightedFact, FactStore, triple_hash
 
 __all__ = [
     "PREFIXES", "PREFIX_HEADER", "SparqlClient", "SparqlError",
@@ -16,4 +17,5 @@ __all__ = [
     "SchemaRegistry", "slug",
     "SessionContext", "SessionReader",
     "Extractor", "ExtractionResult", "validate",
+    "WeightedFact", "FactStore", "triple_hash",
 ]

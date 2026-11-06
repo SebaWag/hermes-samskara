@@ -52,6 +52,8 @@ from samskara_core import (  # noqa: E402  (import after sys.path bootstrap)
     reindex_commands,
 )
 from samskara_core.extract import DEFAULT_NAMESPACE, Extractor  # noqa: E402
+from samskara_core.facts import FactStore  # noqa: E402
+from samskara_core.journal import expand  # noqa: E402
 from samskara_core.llm import make_llm  # noqa: E402
 from samskara_core.reconcile import LabelIndex  # noqa: E402
 from samskara_core.schema import SchemaRegistry  # noqa: E402
@@ -87,6 +89,7 @@ class SamskaraMemoryProvider(MemoryProvider):
         self._client: Optional[SparqlClient] = None
         self._journal: Optional[Journal] = None
         self._registry: Optional[SchemaRegistry] = None
+        self._facts: Optional[FactStore] = None
         self._session_id: str = ""
         self._hermes_home: str = ""
         self._turns: List[Dict[str, str]] = []
@@ -124,6 +127,8 @@ class SamskaraMemoryProvider(MemoryProvider):
         # The vocabulary is per-user and grows with their data.
         schema_path = Path(self._journal_dir()).parent / "schema.json"
         self._registry = SchemaRegistry(schema_path)
+        # Weight store: salience, usage and conflicts live next to the journal.
+        self._facts = FactStore(Path(self._journal_dir()).parent / "facts.db")
         log.info(
             "samskara ready: endpoint=%s session=%s journal=%s",
             self._client.endpoint,
@@ -158,6 +163,7 @@ class SamskaraMemoryProvider(MemoryProvider):
                 max_entities=int(self._cfg["max_entities"]),
                 max_facts=int(self._cfg["max_facts"]),
                 max_chars=int(self._cfg["max_chars"]),
+                store=self._facts,
             )
         except Exception as exc:  # noqa: BLE001 - memory must never break a turn
             self._stats["errors"] += 1
@@ -264,6 +270,16 @@ class SamskaraMemoryProvider(MemoryProvider):
             except Exception:  # noqa: BLE001
                 pass
 
+        if triples and self._facts is not None:
+            try:
+                # Weigh the same identifiers the graph stores, or the weights
+                # point at triples that do not exist.
+                expanded = [(expand(s), expand(p), expand(o)) for s, p, o in triples]
+                # extraction is plausible, not certain: below an explicit write
+                self._facts.record(expanded, session_id=self._session_id, confidence=0.65)
+            except Exception:  # noqa: BLE001
+                pass
+
         if triples:
             written = self._append(triples)
             log.info("samskara: %d triple(s) journalled at session end", written)
@@ -295,6 +311,8 @@ class SamskaraMemoryProvider(MemoryProvider):
         # The vocabulary is per-user and grows with their data.
         schema_path = Path(self._journal_dir()).parent / "schema.json"
         self._registry = SchemaRegistry(schema_path)
+        # Weight store: salience, usage and conflicts live next to the journal.
+        self._facts = FactStore(Path(self._journal_dir()).parent / "facts.db")
         with self._lock:
             self._turns.clear()
 
@@ -529,7 +547,9 @@ class SamskaraMemoryProvider(MemoryProvider):
         if not self._client:
             return "samskara: not initialized"
         try:
-            block, elapsed = run_recall(self._client, query, max_entities=max(1, limit), max_facts=24)
+            block, elapsed = run_recall(
+                self._client, query, max_entities=max(1, limit), max_facts=24, store=self._facts
+            )
         except SparqlError as exc:
             self._stats["errors"] += 1
             return f"samskara: graph error: {exc}"
@@ -595,6 +615,11 @@ class SamskaraMemoryProvider(MemoryProvider):
                 payload["count_ms"] = round(elapsed, 3)
             except SparqlError:
                 payload["entities"] = "unavailable"
+        if self._facts is not None:
+            try:
+                payload["weights"] = self._facts.stats()
+            except Exception:  # noqa: BLE001
+                payload["weights"] = "unavailable"
         return json.dumps(payload, indent=2, ensure_ascii=False)
 
 

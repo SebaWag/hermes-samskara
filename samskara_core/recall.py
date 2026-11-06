@@ -44,6 +44,13 @@ class Fact:
     predicate: str          # local name, e.g. "usaTecnologia"
     target: str             # human label of the other end
     other_uri: str = ""
+    predicate_uri: str = ""  # full URI, so the fact can be weighted
+
+    def as_triple(self, subject_uri: str):
+        """The triple as stored in the graph, in the direction it was found."""
+        if self.direction == "out":
+            return (subject_uri, self.predicate_uri, self.other_uri)
+        return (self.other_uri, self.predicate_uri, subject_uri)
 
 
 def keywords(text: str, max_keywords: int = 6) -> List[str]:
@@ -157,7 +164,15 @@ def facts(client: SparqlClient, uri: str, max_facts: int = 24) -> List[Fact]:
             else:
                 other_uri = row.get("s", "")
                 label = row.get("sLabel") or local_name(other_uri)
-            out.append(Fact(direction=direction, predicate=pred, target=label, other_uri=other_uri))
+            out.append(
+                Fact(
+                    direction=direction,
+                    predicate=pred,
+                    target=label,
+                    other_uri=other_uri,
+                    predicate_uri=pred_uri,
+                )
+            )
     return out[:max_facts]
 
 
@@ -166,6 +181,7 @@ def render(
     facts_by_uri: Dict[str, List[Fact]],
     elapsed_ms: float,
     max_chars: int = 1200,
+    weights: Optional[Dict[str, float]] = None,
 ) -> str:
     """Render a recall block: compact, human-readable, with a provenance header."""
     if not entities:
@@ -176,15 +192,30 @@ def render(
         f"{fact_count} hecho(s) · {elapsed_ms:.2f} ms]"
     )
     lines: List[str] = [header]
+    weights = weights or {}
     for entity in entities:
         lines.append(f"• {entity.label}  ({local_name(entity.uri)})")
-        for fact in facts_by_uri.get(entity.uri, []):
+        entity_facts = list(facts_by_uri.get(entity.uri, []))
+        if weights:
+            entity_facts.sort(key=lambda f: -weights.get(_wkey(entity.uri, f), 0.0))
+        for fact in entity_facts:
             arrow = "→" if fact.direction == "out" else "←"
-            lines.append(f"   {arrow} {humanize(fact.predicate)}: {fact.target}")
+            suffix = ""
+            weight = weights.get(_wkey(entity.uri, fact))
+            if weight is not None:
+                suffix = f"  ·{weight:.2f}"
+            lines.append(f"   {arrow} {humanize(fact.predicate)}: {fact.target}{suffix}")
     block = "\n".join(lines)
     if len(block) > max_chars:
         block = block[: max_chars - 20].rstrip() + "\n  … (truncado)"
     return block
+
+
+def _wkey(entity_uri: str, fact: "Fact") -> str:
+    """Stable key for a fact's weight, matching facts.triple_hash()."""
+    from .facts import triple_hash
+
+    return triple_hash(fact.as_triple(entity_uri))
 
 
 def recall(
@@ -193,10 +224,29 @@ def recall(
     max_entities: int = 3,
     max_facts: int = 24,
     max_chars: int = 1200,
+    store=None,
 ) -> Tuple[str, float]:
-    """Full recall pipeline: text -> entities -> neighbourhood -> rendered block."""
+    """Full recall pipeline: text -> entities -> neighbourhood -> weighted block.
+
+    When a `store` is given, facts are ranked by weight and the ones actually
+    shown are reinforced — memory gets heavier where it earns its keep.
+    """
     entities = find_entities(client, text, limit=max_entities)
     if not entities:
         return "", client.last_ms
     facts_by_uri = {e.uri: facts(client, e.uri, max_facts=max_facts) for e in entities}
-    return render(entities, facts_by_uri, client.last_ms, max_chars=max_chars), client.last_ms
+    weights: Dict[str, float] = {}
+    used: List[tuple] = []
+    if store is not None:
+        for entity in entities:
+            for fact in facts_by_uri.get(entity.uri, []):
+                key = _wkey(entity.uri, fact)
+                weights[key] = store.weight(fact.as_triple(entity.uri))
+                used.append(fact.as_triple(entity.uri))
+    block = render(entities, facts_by_uri, client.last_ms, max_chars=max_chars, weights=weights)
+    if store is not None and block:
+        try:
+            store.reinforce(used)
+        except Exception:  # noqa: BLE001 - reinforcement is best-effort
+            pass
+    return block, client.last_ms
