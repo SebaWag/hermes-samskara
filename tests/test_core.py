@@ -120,7 +120,7 @@ def test_journal_accumulates_across_appends(tmp_path):
 
 
 def test_journal_sanitises_session_id(tmp_path):
-    j = Journal(tmp_path, session_id="../../etc/passwd")
+    j = Journal(tmp_path, session_id="../../../../outside/journal")
     assert ".." not in j.path.name and "/" not in j.path.name
 
 

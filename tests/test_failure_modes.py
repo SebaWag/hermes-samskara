@@ -131,7 +131,7 @@ def test_prefetch_never_raises_on_blank_query(tmp_path):
 # the journal cannot be walked out of
 # ---------------------------------------------------------------------------
 def test_journal_neutralises_traversal_in_session_id(tmp_path):
-    journal = Journal(tmp_path / "journal", session_id="../../etc/passwd")
+    journal = Journal(tmp_path / "journal", session_id="../../../../outside/journal")
     assert journal.path.parent == tmp_path / "journal"
     assert ".." not in journal.path.name
     assert journal.path.name.startswith("session-")

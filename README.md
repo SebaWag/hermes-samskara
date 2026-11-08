@@ -187,17 +187,24 @@ SAMSKARA_PASSWORD=...      # read via agent.secret_scope.get_secret
 
 It is never written to `samskara.json` and never logged.
 
-Or persistently in `$HERMES_HOME/samskara.json`:
+Or persistently in `$HERMES_HOME/samskara.json` — the whole settings surface:
 
 ```json
 {
   "endpoint": "http://127.0.0.1:1234/sparql",
   "auto_recall": true,
+  "extract_on_session_end": true,
   "max_entities": 3,
   "max_facts": 24,
-  "timeout": 8.0
+  "max_chars": 1200,
+  "timeout": 8.0,
+  "write_mode": "journal"
 }
 ```
+
+`hermes memory setup` deliberately asks for **three** things — `endpoint`,
+`username`, `password` — and nothing else. The rest are tuning knobs with
+defaults, so they live here instead of in a seven-question wizard.
 
 Verify:
 

@@ -476,51 +476,30 @@ class SamskaraMemoryProvider(MemoryProvider):
 
     # -- config ------------------------------------------------------------
     def get_config_schema(self) -> List[Dict[str, Any]]:
-        """Setup fields for `hermes memory setup`.
+        """Setup fields for `hermes memory setup` — minimal, on purpose.
 
         Field names follow `MemoryProvider.get_config_schema` (`key`,
-        `description`, `secret`, `env_var`). `password` is a credential: it
-        carries `secret: True` plus an explicit `env_var`, so the wizard writes
-        it to $HERMES_HOME/.env and the value never lands in samskara.json.
+        `description`, `secret`, `env_var`, `url`), and only what a user *must*
+        decide is prompted for: where the graph is, and how to authenticate to
+        it. Everything else keeps a sane default and is documented in the README
+        (`auto_recall`, `extract_on_session_end`, `max_entities`, `max_facts`,
+        `timeout` live in `$HERMES_HOME/samskara.json`). A wizard that asks
+        seven questions for a memory provider is a wizard nobody finishes.
+
+        `password` is a credential: `secret: True` plus an explicit `env_var`
+        means the host writes it to $HERMES_HOME/.env, and `_load_config` reads
+        it back through `agent.secret_scope.get_secret`.
         """
         return [
             {
                 "key": "endpoint",
-                "description": "Graph endpoint (SPARQL). A base URL gets /sparql appended. Use embedded://seed/demo.ttl to run the demo corpus in-process, with nothing installed.",
+                "description": "Graph endpoint (SPARQL) — use embedded://seed/demo.ttl to try it with nothing installed",
                 "default": DEFAULTS["endpoint"],
                 "type": "text",
             },
             {
-                "key": "auto_recall",
-                "description": "Inject relational context before the model answers",
-                "default": True,
-                "type": "boolean",
-            },
-            {
-                "key": "extract_on_session_end",
-                "description": "Propose new relations at session close (uses the host model via ctx.llm; skipped when the host does not expose it)",
-                "default": True,
-                "type": "boolean",
-            },
-            {
-                "key": "max_entities",
-                "description": "How many matched entities to expand per recall (more = more context tokens)",
-                "default": 3,
-                "type": "integer",
-                "minimum": 1,
-                "maximum": 20,
-            },
-            {
-                "key": "timeout",
-                "description": "Hard ceiling for one SPARQL call, in seconds",
-                "default": 8.0,
-                "type": "number",
-                "minimum": 0.5,
-                "maximum": 120,
-            },
-            {
                 "key": "username",
-                "description": "Basic auth user, for endpoints behind a proxy",
+                "description": "Basic auth user, if your endpoint requires one",
                 "default": "",
                 "type": "text",
             },
