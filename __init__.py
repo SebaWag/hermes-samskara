@@ -82,6 +82,26 @@ DEFAULTS: Dict[str, Any] = {
 CONFIG_FILE = "samskara.json"
 
 
+def _secret(name: str) -> str:
+    """Read a credential through the host's secret scope, never `os.environ`.
+
+    `agent.secret_scope.get_secret` honours the active profile's `.env` overlay
+    and, in a multiplexing gateway, fails closed instead of handing back a
+    sibling profile's value. Outside Hermes (unit tests, the `tools/` scripts)
+    the import fails and the value is simply empty — which is the correct
+    answer there: a plugin does not own credentials.
+    """
+    try:
+        from agent.secret_scope import get_secret
+    except Exception:  # pragma: no cover - not running inside Hermes
+        return ""
+    try:
+        return get_secret(name, "") or ""
+    except Exception as exc:  # noqa: BLE001 - fail closed, never crash a turn
+        log.warning("samskara: secret %s is unavailable (%s)", name, exc)
+        return ""
+
+
 class SamskaraMemoryProvider(MemoryProvider):
     """MemoryProvider backed by a MillenniumDB knowledge graph."""
 
@@ -253,6 +273,11 @@ class SamskaraMemoryProvider(MemoryProvider):
         if not pairs:
             return
 
+        # The host's model, or nothing. `make_llm` never falls back to an API
+        # key of its own: if Hermes does not expose `ctx.llm` (today's
+        # in-process memory-provider path), we skip LLM extraction entirely and
+        # keep the entity-mention fallback below. A transcript is never posted
+        # to a host the user did not configure.
         llm = make_llm(_CTX)
         triples: List[tuple] = []
         if getattr(llm, "available", False):
@@ -269,6 +294,13 @@ class SamskaraMemoryProvider(MemoryProvider):
             except Exception as exc:  # noqa: BLE001 - never break session close
                 self._stats["errors"] += 1
                 log.debug("extraction failed: %s", exc)
+        else:
+            # Not an error: a narrow host surface is the safe default. Recorded
+            # so `status` can explain why a session produced no new relations.
+            log.debug(
+                "samskara: no host model (%s) — LLM extraction skipped, keeping entity mentions",
+                getattr(llm, "unavailable_reason", "ctx.llm unavailable"),
+            )
 
         # Fallback (and complement): at minimum, record what the session was about.
         if self._client:
@@ -444,56 +476,75 @@ class SamskaraMemoryProvider(MemoryProvider):
 
     # -- config ------------------------------------------------------------
     def get_config_schema(self) -> List[Dict[str, Any]]:
+        """Setup fields for `hermes memory setup`.
+
+        Field names follow `MemoryProvider.get_config_schema` (`key`,
+        `description`, `secret`, `env_var`). `password` is a credential: it
+        carries `secret: True` plus an explicit `env_var`, so the wizard writes
+        it to $HERMES_HOME/.env and the value never lands in samskara.json.
+        """
         return [
             {
-                "name": "endpoint",
-                "label": "Graph endpoint",
-                "type": "text",
+                "key": "endpoint",
+                "description": "Graph endpoint (SPARQL). A base URL gets /sparql appended. Use embedded://seed/demo.ttl to run the demo corpus in-process, with nothing installed.",
                 "default": DEFAULTS["endpoint"],
-                "help": "SPARQL endpoint. A base URL gets /sparql appended automatically. Use embedded://seed/demo.ttl to run the demo corpus in-process, with nothing installed.",
-            },
-            {
-                "name": "auto_recall",
-                "label": "Recall on every turn",
-                "type": "bool",
-                "default": True,
-                "help": "Inject relational context before the model answers.",
-            },
-            {
-                "name": "max_entities",
-                "label": "Max entities per recall",
-                "type": "number",
-                "default": 3,
-                "help": "How many matched entities to expand. More = more context tokens.",
-            },
-            {
-                "name": "timeout",
-                "label": "Query timeout (s)",
-                "type": "number",
-                "default": 8.0,
-                "help": "Hard ceiling for one SPARQL call.",
-            },
-            {
-                "name": "username",
-                "label": "Basic auth user",
                 "type": "text",
-                "default": "",
-                "help": "For endpoints behind a proxy that requires auth.",
             },
             {
-                "name": "password",
-                "label": "Basic auth password",
-                "type": "secret",
+                "key": "auto_recall",
+                "description": "Inject relational context before the model answers",
+                "default": True,
+                "type": "boolean",
+            },
+            {
+                "key": "extract_on_session_end",
+                "description": "Propose new relations at session close (uses the host model via ctx.llm; skipped when the host does not expose it)",
+                "default": True,
+                "type": "boolean",
+            },
+            {
+                "key": "max_entities",
+                "description": "How many matched entities to expand per recall (more = more context tokens)",
+                "default": 3,
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 20,
+            },
+            {
+                "key": "timeout",
+                "description": "Hard ceiling for one SPARQL call, in seconds",
+                "default": 8.0,
+                "type": "number",
+                "minimum": 0.5,
+                "maximum": 120,
+            },
+            {
+                "key": "username",
+                "description": "Basic auth user, for endpoints behind a proxy",
                 "default": "",
-                "help": "Stored in $HERMES_HOME/samskara.json, never logged.",
+                "type": "text",
+            },
+            {
+                "key": "password",
+                "description": "Basic auth password for the graph endpoint",
+                "default": "",
+                "type": "text",
+                "secret": True,
+                "env_var": "SAMSKARA_PASSWORD",
             },
         ]
 
     def save_config(self, values: Dict[str, Any], hermes_home: str) -> None:
         path = Path(hermes_home or self._hermes_home or ".") / CONFIG_FILE
+        # Credentials never reach this file: the host writes them to .env using
+        # the schema's `env_var`, and `_load_config` reads them back through the
+        # secret scope at initialize().
         merged = dict(self._cfg)
-        merged.update({k: v for k, v in (values or {}).items() if k in DEFAULTS})
-        path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
+        merged.update({k: v for k, v in (values or {}).items() if k in DEFAULTS and k != "password"})
+        path.write_text(
+            json.dumps({k: v for k, v in merged.items() if k != "password"}, indent=2),
+            encoding="utf-8",
+        )
         try:
             os.chmod(path, 0o600)
         except OSError:
@@ -514,13 +565,18 @@ class SamskaraMemoryProvider(MemoryProvider):
             "SAMSKARA_ENDPOINT": "endpoint",
             "SAMSKARA_TIMEOUT": "timeout",
             "SAMSKARA_USERNAME": "username",
-            "SAMSKARA_PASSWORD": "password",
             "SAMSKARA_AUTO_RECALL": "auto_recall",
         }
         for env_key, cfg_key in env_map.items():
             value = os.environ.get(env_key)
             if value:
                 found[cfg_key] = value
+        # The password is a credential, not configuration: it comes from the
+        # host's secret scope (declared below with `secret` + `env_var`, so the
+        # setup wizard writes it to $HERMES_HOME/.env and nothing logs it).
+        password = _secret("SAMSKARA_PASSWORD")
+        if password:
+            found["password"] = password
         if "auto_recall" in found and isinstance(found["auto_recall"], str):
             found["auto_recall"] = found["auto_recall"].lower() not in {"0", "false", "no"}
         return found

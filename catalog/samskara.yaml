@@ -5,7 +5,7 @@
 name: samskara
 repo: https://github.com/SebaWag/hermes-samskara
 sha: 3faec09018b0b744ccb5ce4b6efdf9fe952a6d04
-version: "0.2.0"
+version: "0.3.1"
 description: >-
   Relational memory provider backed by a knowledge graph (MillenniumDB or any
   SPARQL endpoint): multi-hop recall with provenance on every fact, an ontology
@@ -16,9 +16,14 @@ description: >-
   (state.db, read-only) and reconciles new entities against existing ones.
   Disclosure — with session-end extraction enabled (default), the plugin sends
   the recent turns of a session to the user's own model through ctx.llm
-  (host-owned credentials, no provider override) to extract facts; nothing else
-  leaves the machine. No telemetry. The graph endpoint defaults to loopback and
-  is the only other network call.
+  (host-owned credentials, no provider override) to extract facts. If the host
+  does not expose ctx.llm, extraction is skipped rather than redirected: the
+  session records its entity mentions lexically and no model is called. The
+  plugin reads no provider API key from the environment and has no default model
+  host. The graph endpoint defaults to loopback and is the only other network
+  call. The CLI tool tools/backfill.py — never imported by the plugin — reads
+  past sessions from state.db and sends them only to the endpoint the user names
+  (SAMSKARA_LLM_BASE_URL + SAMSKARA_LLM_API_KEY). No telemetry.
 maintainer: SebaWag
 tier: community
 category: memory

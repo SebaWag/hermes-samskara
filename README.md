@@ -174,6 +174,19 @@ entirely with `SAMSKARA_ENDPOINT=embedded://seed/demo.ttl`:
 SAMSKARA_ENDPOINT=http://127.0.0.1:1234/sparql
 ```
 
+If your endpoint sits behind basic auth, the password is a **credential**, so it
+is read through the host's secret scope rather than `os.environ` — the same path
+a multiplexing gateway uses so one profile's secret cannot leak into another's
+turn. `hermes memory setup` writes it for you; declared by hand it lives in the
+same `.env`:
+
+```bash
+SAMSKARA_USERNAME=reader
+SAMSKARA_PASSWORD=...      # read via agent.secret_scope.get_secret
+```
+
+It is never written to `samskara.json` and never logged.
+
 Or persistently in `$HERMES_HOME/samskara.json`:
 
 ```json
@@ -413,7 +426,20 @@ Being explicit about this is cheaper than being asked in review:
   through `ctx.llm` — the host's own model and credentials, with **no provider
   override**. With a fast model that is a fraction of a cent per session. Turn it
   off with `extract_on_session_end: false` if you only want manual writes.
+- **If the host does not expose `ctx.llm`** (true of Hermes' in-process
+  memory-provider path today), extraction is **skipped**, not redirected: the
+  session still records its entity mentions lexically and no model is called.
+  Samskara never reads `OPENAI_API_KEY`, `DEEPSEEK_API_KEY` or any other
+  provider key from the environment, and has no default model host. Inside the
+  agent it has no credential of its own, by design.
 - The **only** other network call is the graph endpoint you configure.
+- **`tools/backfill.py` is the one exception, and it is CLI-only.** Run from a
+  terminal, it reads your past sessions from `$HERMES_HOME/state.db`
+  (read-only), sends their text to the model endpoint **you name**, and journals
+  the extracted relations. It requires an explicit `SAMSKARA_LLM_BASE_URL`
+  **and** `SAMSKARA_LLM_API_KEY`; with either missing it refuses to run rather
+  than guessing a host. Nothing in the plugin imports it, and it never runs as
+  part of a turn.
 - No telemetry, no self-updater, no bundled data.
 - **Extraction is plausible, not certain.** It can produce an edge that is wrong.
   That is exactly why facts carry a weight (extraction 0.65 < explicit write 0.90)

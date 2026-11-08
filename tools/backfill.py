@@ -9,6 +9,11 @@ After that, each session close adds the new facts only.
 It is idempotent: processed sessions are recorded in a state file, so re-running
 never duplicates work or triples.
 
+Disclosure: this reads your past sessions from `state.db` (read-only) and sends
+their text to the model endpoint you configure here — `SAMSKARA_LLM_BASE_URL`
+plus `SAMSKARA_LLM_API_KEY` (or `--base-url`). There is no default host: if you
+do not name an endpoint, the script refuses to run rather than guessing one.
+
 Usage:
     python tools/backfill.py --hermes-home ~/.hermes [--limit 20] [--dry-run]
 
@@ -28,7 +33,7 @@ sys.path.insert(0, str(REPO))
 
 from samskara_core import Journal  # noqa: E402
 from samskara_core.extract import Extractor  # noqa: E402
-from samskara_core.llm import make_llm  # noqa: E402
+from samskara_core.llm import cli_setup_help, make_cli_llm  # noqa: E402
 from samskara_core.client import SparqlClient  # noqa: E402
 from samskara_core.reconcile import LabelIndex  # noqa: E402
 from samskara_core.schema import SchemaRegistry  # noqa: E402
@@ -66,12 +71,19 @@ def main() -> int:
         journal_dir.mkdir(parents=True, exist_ok=True)
 
     registry = SchemaRegistry(schema_path)
-    llm = make_llm()
-    if not getattr(llm, "available", False):
-        sys.exit("no model available: set DEEPSEEK_API_KEY (or run inside Hermes, where ctx.llm is used)")
-    if args.model or args.base_url:
-        llm.model = args.model or llm.model
-        llm.base_url = (args.base_url or llm.base_url).rstrip("/")
+    # CLI path: an explicit endpoint and an explicit key, named SAMSKARA_*-only.
+    # A key you exported for another provider is never presented to this one.
+    llm = make_cli_llm(
+        base_url=args.base_url or None,
+        model=args.model or None,
+    )
+    if not llm.available:
+        sys.exit(
+            "no model configured: "
+            + llm.unavailable_reason
+            + "\n  "
+            + "\n  ".join(cli_setup_help())
+        )
 
     index = LabelIndex()
     endpoint = args.endpoint or os.environ.get("SAMSKARA_ENDPOINT", "")
