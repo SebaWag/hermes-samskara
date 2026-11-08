@@ -175,10 +175,13 @@ SAMSKARA_ENDPOINT=http://127.0.0.1:1234/sparql
 ```
 
 If your endpoint sits behind basic auth, the password is a **credential**, so it
-is read through the host's secret scope rather than `os.environ` — the same path
-a multiplexing gateway uses so one profile's secret cannot leak into another's
-turn. `hermes memory setup` writes it for you; declared by hand it lives in the
-same `.env`:
+is resolved by the host, not by us: Samskara calls
+`agent.secret_scope.get_secret("SAMSKARA_PASSWORD")` and never reads
+`os.environ` itself. That is the path a multiplexing gateway uses, where a miss
+fails closed instead of handing back another profile's value; in a
+single-profile deployment the host may resolve it from the process environment,
+by design (systemd, `op run`). `hermes memory setup` writes it for you; declared
+by hand it lives in the same `.env`:
 
 ```bash
 SAMSKARA_USERNAME=reader

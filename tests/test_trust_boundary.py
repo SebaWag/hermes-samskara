@@ -208,7 +208,12 @@ def test_session_end_uses_the_host_model_when_present(tmp_path, monkeypatch):
 # 4. credentials: secret scope, schema declaration, never in samskara.json
 # ---------------------------------------------------------------------------
 def _install_secret_scope(monkeypatch, mapping):
-    """Stand in for `agent.secret_scope` — the host's profile-scoped reader."""
+    """Stand in for `agent.secret_scope` — the host's profile-scoped reader.
+
+    Installed over whatever is importable, so these tests assert the same thing
+    on a laptop (no `agent` package) and on a host where the real Hermes is on
+    `sys.path` — which is where the difference actually bites.
+    """
     fake_agent = types.ModuleType("agent")
     fake_scope = types.ModuleType("agent.secret_scope")
     fake_scope.get_secret = lambda name, default=None: mapping.get(name, default)
@@ -226,8 +231,18 @@ def test_password_is_read_through_the_secret_scope(tmp_path, monkeypatch):
     assert provider._cfg["password"] == "from-the-scope"
 
 
-def test_password_is_not_read_from_the_environment(tmp_path, monkeypatch):
-    """Bypassing the scope would leak across profiles in a multiplexing gateway."""
+def test_password_is_delegated_to_the_scope_not_read_directly(tmp_path, monkeypatch):
+    """We never read `os.environ`: the host's scope decides where a value comes from.
+
+    This is the precise invariant, and it is easy to overstate. `get_secret` is
+    an *overlay, not a blindfold*: with multiplexing inactive it falls through
+    to `os.environ` on purpose (systemd, `op run`), because a single-profile
+    deployment injects credentials that way. What must hold — and what this test
+    pins — is that the **decision is the host's**: a scope that resolves nothing
+    yields nothing, even with the variable set in the environment. Reading
+    `os.environ` here would hand a multiplexing gateway another profile's value.
+    """
+    _install_secret_scope(monkeypatch, {})  # a scope that resolves nothing
     monkeypatch.setenv("SAMSKARA_PASSWORD", "from-the-environment")
     module = _load_plugin("samskara_trust_no_env_password")
     provider = module.SamskaraMemoryProvider()
